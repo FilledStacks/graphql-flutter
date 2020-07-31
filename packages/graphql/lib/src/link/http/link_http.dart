@@ -28,6 +28,9 @@ class HttpLink extends Link {
     Map<String, String> headers,
     Map<String, dynamic> credentials,
     Map<String, dynamic> fetchOptions,
+
+    /// Fires this function when the response headers return, before the returning the result
+    Function(Map<String, String>) onResponseHeaders,
   }) : super(
           // @todo possibly this is a bug in dart analyzer
           // ignore: undefined_named_parameter
@@ -88,14 +91,18 @@ class HttpLink extends Link {
 
               try {
                 // httpOptionsAndBody.body as String
-                final BaseRequest request = await _prepareRequest(parsedUri, operation, config);
+                final BaseRequest request =
+                    await _prepareRequest(parsedUri, operation, config);
 
                 response = await fetcher.send(request);
+
+                onResponseHeaders?.call(response.headers);
 
                 operation.setContext(<String, StreamedResponse>{
                   'response': response,
                 });
-                final FetchResult parsedResponse = await _parseResponse(response);
+                final FetchResult parsedResponse =
+                    await _parseResponse(response);
 
                 controller.add(parsedResponse);
               } catch (failure) {
@@ -175,9 +182,12 @@ Future<BaseRequest> _prepareRequest(
       config.options['method'] = 'GET';
     }
 
-    final httpMethod = config.options['method']?.toString()?.toUpperCase() ?? 'POST';
+    final httpMethod =
+        config.options['method']?.toString()?.toUpperCase() ?? 'POST';
     if (httpMethod == 'GET') {
-      uri = uri.replace(queryParameters: body.map((k, v) => MapEntry(k, v is String ? v : json.encode(v))));
+      uri = uri.replace(
+          queryParameters: body
+              .map((k, v) => MapEntry(k, v is String ? v : json.encode(v))));
     }
     final Request r = Request(httpMethod, uri);
     r.headers.addAll(httpHeaders);
@@ -279,7 +289,7 @@ Map<String, dynamic> _buildBody(
   final Map<String, dynamic> body = <String, dynamic>{
     'operationName': operation.operationName,
     'variables': operation.variables,
-  }; 
+  };
 
   // not sending the query (i.e persisted queries)
   if (config.http.includeExtensions) {
@@ -303,8 +313,8 @@ Future<FetchResult> _parseResponse(StreamedResponse response) async {
 
   Map<String, dynamic> jsonResponse;
   try {
-      jsonResponse = json.decode(decodedBody) as Map<String, dynamic>;
-  } catch(e) {
+    jsonResponse = json.decode(decodedBody) as Map<String, dynamic>;
+  } catch (e) {
     throw ClientException('Invalid response body: $decodedBody');
   }
   final FetchResult fetchResult = FetchResult(
